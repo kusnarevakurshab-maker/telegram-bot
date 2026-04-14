@@ -1,105 +1,107 @@
 import os
-from telegram import Update
+from telegram import Update, KeyboardButton, ReplyKeyboardMarkup
 from telegram.ext import (
-    ApplicationBuilder, CommandHandler, MessageHandler,
-    filters, ContextTypes, ConversationHandler
+    ApplicationBuilder,
+    CommandHandler,
+    MessageHandler,
+    ContextTypes,
+    ConversationHandler,
+    filters,
 )
 
-# Состояния
-NAME, PHONE, SERVICE, SOURCE, CITY = range(5)
-
-# Переменные окружения
 TOKEN = os.getenv("TOKEN")
 
-MANAGERS = []
-if os.getenv("MANAGERS"):
-    MANAGERS = [int(x) for x in os.getenv("MANAGERS").split(",") if x]
-
-
-# Проверка токена
 if not TOKEN:
     raise ValueError("❌ TOKEN не задан в Environment Variables")
 
+# этапы анкеты
+NAME, CITY, PHONE, SOURCE = range(4)
 
-# Старт
+user_data = {}
+
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Как вас зовут?")
+    await update.message.reply_text("👋 Привет! Напиши своё имя:")
     return NAME
 
 
-# Имя
 async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data["name"] = update.message.text
-    await update.message.reply_text("Введите телефон:")
-    return PHONE
+    user_id = update.effective_user.id
+    user_data[user_id] = {"name": update.message.text}
 
-
-# Телефон
-async def get_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data["phone"] = update.message.text
-    await update.message.reply_text("Какая услуга интересует?")
-    return SERVICE
-
-
-# Услуга
-async def get_service(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data["service"] = update.message.text
-    await update.message.reply_text("Откуда вы о нас узнали?")
-    return SOURCE
-
-
-# Источник
-async def get_source(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data["source"] = update.message.text
-    await update.message.reply_text("Введите город:")
+    await update.message.reply_text("🏙 Теперь напиши свой город:")
     return CITY
 
 
-# Город
 async def get_city(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data["city"] = update.message.text
+    user_id = update.effective_user.id
+    user_data[user_id]["city"] = update.message.text
 
-    text = (
-        f"📩 Новая заявка:\n\n"
-        f"👤 Имя: {context.user_data['name']}\n"
-        f"📞 Телефон: {context.user_data['phone']}\n"
-        f"🛠 Услуга: {context.user_data['service']}\n"
-        f"📢 Источник: {context.user_data['source']}\n"
-        f"📍 Город: {context.user_data['city']}"
+    # кнопка для отправки телефона
+    keyboard = [
+        [KeyboardButton("📱 Отправить номер", request_contact=True)]
+    ]
+
+    await update.message.reply_text(
+        "📞 Отправь свой номер телефона:",
+        reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True),
     )
 
-    if MANAGERS:
-        for manager in MANAGERS:
-            await context.bot.send_message(chat_id=manager, text=text)
+    return PHONE
 
-    await update.message.reply_text("✅ Спасибо! Мы с вами свяжемся.")
+
+async def get_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+
+    phone = update.message.contact.phone_number if update.message.contact else update.message.text
+    user_data[user_id]["phone"] = phone
+
+    await update.message.reply_text("📢 Откуда ты узнал о нас?")
+    return SOURCE
+
+
+async def get_source(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    user_data[user_id]["source"] = update.message.text
+
+    data = user_data[user_id]
+
+    await update.message.reply_text(
+        "✅ Спасибо! Вот твои данные:\n\n"
+        f"👤 Имя: {data['name']}\n"
+        f"🏙 Город: {data['city']}\n"
+        f"📞 Телефон: {data['phone']}\n"
+        f"📢 Источник: {data['source']}"
+    )
+
+    return ConversationHandler.END
+
+
+async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("❌ Опрос отменён")
     return ConversationHandler.END
 
 
 def main():
+    print("🚀 Бот запущен...")
+
     application = ApplicationBuilder().token(TOKEN).build()
 
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler("start", start)],
         states={
             NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_name)],
-            PHONE: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_phone)],
-            SERVICE: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_service)],
-            SOURCE: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_source)],
             CITY: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_city)],
+            PHONE: [MessageHandler(filters.ALL, get_phone)],
+            SOURCE: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_source)],
         },
-        fallbacks=[]
+        fallbacks=[CommandHandler("cancel", cancel)],
     )
 
     application.add_handler(conv_handler)
 
-    print("🚀 Бот запущен...")
     application.run_polling()
 
 
 if __name__ == "__main__":
     main()
-
-
-  
-
