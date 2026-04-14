@@ -45,9 +45,6 @@ async def phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif update.message.text and update.message.text.isdigit():
         context.user_data["phone"] = update.message.text
 
-    else:
-        await update.message.reply_text(
-            "📵 Отправьте номер кнопкой или введите только цифры"
         )
         return PHONE
 
