@@ -1,8 +1,7 @@
 import os
-from flask import Flask, request
 from telegram import Update, KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import (
-    Application,
+    ApplicationBuilder,
     CommandHandler,
     MessageHandler,
     ContextTypes,
@@ -11,16 +10,15 @@ from telegram.ext import (
 )
 
 TOKEN = os.getenv("TOKEN")
-WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # https://your-service.onrender.com
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 
 if not TOKEN:
     raise ValueError("TOKEN не задан")
 
-app = Flask(__name__)
+ADMIN_IDS = [8372291148, 8139131694]
 
 NAME, PHONE, CITY, SOURCE = range(4)
 
-# ---------------- BOT LOGIC ----------------
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("👤 Как тебя зовут?")
@@ -34,16 +32,17 @@ async def name(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(
         "📱 Отправь номер телефона:",
-        reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+        reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True),
     )
     return PHONE
 
 
 async def phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.message.contact:
-        context.user_data["phone"] = update.message.contact.phone_number
-    else:
-        context.user_data["phone"] = update.message.text
+    context.user_data["phone"] = (
+        update.message.contact.phone_number
+        if update.message.contact
+        else update.message.text
+    )
 
     await update.message.reply_text("🏙 В каком ты городе?")
     return CITY
@@ -56,7 +55,7 @@ async def city(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(
         "📣 Откуда узнал?",
-        reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+        reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True),
     )
     return SOURCE
 
@@ -66,75 +65,66 @@ async def source(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data = context.user_data
 
     text = (
-        "🔥 НОВАЯ ЗАЯВКА\n\n"
+        "🔥 Новая заявка\n\n"
         f"👤 Имя: {data['name']}\n"
         f"📱 Телефон: {data['phone']}\n"
         f"🏙 Город: {data['city']}\n"
         f"📣 Источник: {data['source']}"
     )
 
+    # user reply
     await update.message.reply_text(
-        "✅ Спасибо! Мы скоро с вами свяжемся",
-        reply_markup=ReplyKeyboardRemove()
+        "✅ Спасибо! Мы свяжемся с вами",
+        reply_markup=ReplyKeyboardRemove(),
     )
 
-    # отправка админу (вставь свой ID)
-    ADMIN_IDS = [8372291148, 8139131694]
-
+    # admins
     for admin in ADMIN_IDS:
-        try:
-            await context.bot.send_message(chat_id=admin, text=text)
-        except Exception as e:
-            print("ADMIN ERROR:", e)
+        await context.bot.send_message(chat_id=admin, text=text)
 
     return ConversationHandler.END
 
 
-# ---------------- SETUP BOT ----------------
+def build_app():
+    app = ApplicationBuilder().token(TOKEN).build()
 
-application = Application.builder().token(TOKEN).build()
+    conv = ConversationHandler(
+        entry_points=[CommandHandler("start", start)],
+        states={
+            NAME: [MessageHandler(filters.TEXT, name)],
+            PHONE: [MessageHandler(filters.CONTACT | filters.TEXT, phone)],
+            CITY: [MessageHandler(filters.TEXT, city)],
+            SOURCE: [MessageHandler(filters.TEXT, source)],
+        },
+        fallbacks=[],
+    )
 
-conv = ConversationHandler(
-    entry_points=[CommandHandler("start", start)],
-    states={
-        NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, name)],
-        PHONE: [MessageHandler(filters.CONTACT | filters.TEXT, phone)],
-        CITY: [MessageHandler(filters.TEXT & ~filters.COMMAND, city)],
-        SOURCE: [MessageHandler(filters.TEXT & ~filters.COMMAND, source)],
-    },
-    fallbacks=[],
-)
-
-application.add_handler(conv)
-
-
-# ---------------- WEBHOOK ----------------
-
-@app.route(f"/webhook/{TOKEN}", methods=["POST"])
-def webhook():
-    update = Update.de_json(request.get_json(force=True), application.bot)
-    application.update_queue.put_nowait(update)
-    return "ok"
+    app.add_handler(conv)
+    return app
 
 
-@app.route("/")
-def home():
-    return "Bot is running"
+# ---------------- MAIN ----------------
+app = build_app()
 
 
-# ---------------- START ----------------
+async def on_startup(app):
+    if not WEBHOOK_URL:
+        raise ValueError("WEBHOOK_URL не задан")
 
-def run():
-    import asyncio
+    await app.bot.set_webhook(f"{WEBHOOK_URL}/webhook")
 
-    async def on_start():
-        await application.bot.set_webhook(url=f"{WEBHOOK_URL}/webhook/{TOKEN}")
-        print("WEBHOOK SET")
 
-    asyncio.get_event_loop().run_until_complete(on_start())
-
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
+async def on_shutdown(app):
+    await app.bot.delete_webhook()
 
 
 if __name__ == "__main__":
-    run()
+    app.post_init = on_startup
+    app.post_shutdown = on_shutdown
+
+    print("BOT STARTED (WEBHOOK MODE)")
+    app.run_webhook(
+        listen="0.0.0.0",
+        port=int(os.getenv("PORT", 10000)),
+        url_path="webhook",
+    )
