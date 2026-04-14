@@ -14,6 +14,8 @@ TOKEN = os.getenv("TOKEN")
 if not TOKEN:
     raise ValueError("TOKEN не задан в Environment Variables")
 
+
+ADMIN_IDS = [8372291148, 8139131694]
 NAME, PHONE, CITY, SOURCE = range(4)
 
 
@@ -50,28 +52,37 @@ async def city(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [["Instagram", "TikTok"]]
 
     await update.message.reply_text(
-        "📣 Откуда узнал?",
+        "📣 Откуда вы про нас узнали?",
         reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
     )
     return SOURCE
 
+  async def source(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.message.text not in ["Instagram", "TikTok"]:
+        await update.message.reply_text("Выбери кнопку 👇")
+        return SOURCE
 
-async def source(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["source"] = update.message.text
 
     data = context.user_data
 
     text = (
-        "✅ Новая заявка:\n\n"
+        "🔥 Новая заявка!\n\n"
         f"👤 Имя: {data['name']}\n"
         f"📱 Телефон: {data['phone']}\n"
         f"🏙 Город: {data['city']}\n"
         f"📣 Источник: {data['source']}"
     )
 
-    await update.message.reply_text(text, reply_markup=ReplyKeyboardRemove())
-    return ConversationHandler.END
+    await update.message.reply_text(
+        "✅ Спасибо! Мы скоро с вами свяжемся",
+        reply_markup=ReplyKeyboardRemove()
+    )
 
+    for admin_id in ADMIN_IDS:
+        await context.bot.send_message(chat_id=admin_id, text=text)
+
+    return ConversationHandler.END
 
 def main():
     app = ApplicationBuilder().token(TOKEN).build()
