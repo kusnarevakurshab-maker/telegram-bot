@@ -76,9 +76,7 @@ async def get_city(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 
-import asyncio
-
-async def main_async():
+def main():
     application = ApplicationBuilder().token(TOKEN).build()
 
     conv_handler = ConversationHandler(
@@ -96,12 +94,11 @@ async def main_async():
     application.add_handler(conv_handler)
 
     print("🚀 Бот запущен...")
-    await application.run_polling()
+    application.run_polling()
+
 
 if __name__ == "__main__":
-    asyncio.run(main_async())
-
-
+    main()
 
 
   
