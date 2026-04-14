@@ -14,16 +14,17 @@ TOKEN = os.getenv("TOKEN")
 if not TOKEN:
     raise ValueError("TOKEN не задан в Environment Variables")
 
-
 ADMIN_IDS = [8372291148, 8139131694]
 NAME, PHONE, CITY, SOURCE = range(4)
 
 
+# ---------------- START ----------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("👤 Как тебя зовут?")
     return NAME
 
 
+# ---------------- NAME ----------------
 async def name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["name"] = update.message.text
 
@@ -36,16 +37,25 @@ async def name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return PHONE
 
 
+# ---------------- PHONE ----------------
 async def phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message.contact:
         context.user_data["phone"] = update.message.contact.phone_number
-    else:
+
+    elif update.message.text and update.message.text.isdigit():
         context.user_data["phone"] = update.message.text
 
-    await update.message.reply_text("🏙 В каком ты городе?")
+    else:
+        await update.message.reply_text(
+            "📵 Отправьте номер кнопкой или введите только цифры"
+        )
+        return PHONE
+
+    await update.message.reply_text("🏙 Место вашего нахождения?")
     return CITY
 
 
+# ---------------- CITY ----------------
 async def city(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["city"] = update.message.text
 
@@ -57,13 +67,14 @@ async def city(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     return SOURCE
 
-  async def source(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+# ---------------- SOURCE ----------------
+async def source(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message.text not in ["Instagram", "TikTok"]:
         await update.message.reply_text("Выбери кнопку 👇")
         return SOURCE
 
     context.user_data["source"] = update.message.text
-
     data = context.user_data
 
     text = (
@@ -84,18 +95,32 @@ async def city(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     return ConversationHandler.END
 
+
+# ---------------- CANCEL ----------------
+async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "❌ Диалог отменён",
+        reply_markup=ReplyKeyboardRemove()
+    )
+    return ConversationHandler.END
+
+
+# ---------------- MAIN ----------------
 def main():
     app = ApplicationBuilder().token(TOKEN).build()
 
     conv = ConversationHandler(
         entry_points=[CommandHandler("start", start)],
         states={
-            NAME: [MessageHandler(filters.TEXT, name)],
+            NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, name)],
             PHONE: [MessageHandler(filters.CONTACT | filters.TEXT, phone)],
-            CITY: [MessageHandler(filters.TEXT, city)],
-            SOURCE: [MessageHandler(filters.TEXT, source)],
+            CITY: [MessageHandler(filters.TEXT & ~filters.COMMAND, city)],
+            SOURCE: [MessageHandler(filters.TEXT & ~filters.COMMAND, source)],
         },
-        fallbacks=[]
+        fallbacks=[
+            CommandHandler("start", start),
+            CommandHandler("cancel", cancel),
+        ]
     )
 
     app.add_handler(conv)
@@ -106,3 +131,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
