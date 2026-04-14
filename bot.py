@@ -20,7 +20,7 @@ NAME, PHONE, CITY, SOURCE = range(4)
 
 # ---------------- START ----------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("👤 Как тебя зовут?")
+    await update.message.reply_text("👤 Как вас зовут?")
     return NAME
 
 
