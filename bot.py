@@ -60,12 +60,24 @@ async def get_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return SOURCE
 
 
+
 async def get_source(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    user_data[user_id]["source"] = update.message.text
+    user_data[user_id]["phone"] = update.message.contact.phone_number if update.message.contact else update.message.text
 
-    data = user_data[user_id]
+    keyboard = [
+        [
+            InlineKeyboardButton("📸 Instagram", callback_data="instagram"),
+            InlineKeyboardButton("🎵 TikTok", callback_data="tiktok"),
+        ]
+    ]
 
+    await update.message.reply_text(
+        "📢 Откуда ты узнал о нас?",
+        reply_markup=InlineKeyboardMarkup(keyboard),
+    )
+
+    return SOURCE
     await update.message.reply_text(
         "✅ Спасибо! Вот твои данные:\n\n"
         f"👤 Имя: {data['name']}\n"
