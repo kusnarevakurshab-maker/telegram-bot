@@ -129,5 +129,7 @@ def main():
 import asyncio
 
 if __name__ == "__main__":
+    print("BOT STARTED")
+    
     asyncio.set_event_loop(asyncio.new_event_loop())
     main()
